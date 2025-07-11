@@ -1,0 +1,69 @@
+//npm install less
+.rem(@name, @multiple) {
+    @{name}: @multiple*1rem;
+}
+
+.vw(@name, @multiple) {
+    @{name}: @multiple*1vw;
+}
+
+@media(max-width:800px) {
+    html {
+        font-size: 16px; //  === 1rem
+    }
+}
+
+@media(min-width:800px) and (max-width:1100px) {
+    html {
+        font-size: 18px;
+    }
+}
+
+@media(min-width:1100px) {
+    html {
+        font-size: 20px;
+    }
+}
+
+html[data-theme="light"] {
+    --bg-color: #ffffff;
+    --text-color: #000000;
+    --text-secondary: #666666;
+    --hover-bg: #f5f5f5;
+    --border-color: #e0e0e0;
+    --shadow-color: rgba(0, 0, 0, 0.288);
+    --chat-bg: #ffffff;
+    --user-msg-bg: rgba(135, 134, 134, 0.164);
+    --ai-msg-bg: #ffffff;
+    --ai-msg-border: #000000;
+    --input-bg: #ffffff;
+    --input-text: #515151;
+    --input-border: #000000;
+    --button-hover: rgba(128, 128, 128, 0.208);
+    --scrollbar-thumb: #000000af;
+    --scrollbar-track: #b2b2b227;
+}
+
+html[data-theme="dark"] {
+    --bg-color: #1a1a1a;
+    --text-color: #ffffff;
+    --text-secondary: #888888;
+    --hover-bg: #333333;
+    --border-color: #333333;
+    --shadow-color: rgba(255, 255, 255, 0.33);
+    --chat-bg: #1a1a1a;
+    --user-msg-bg: rgba(255, 255, 255, 0.164);
+    --ai-msg-bg: #2a2a2a;
+    --ai-msg-border: #ffffff;
+    --input-bg: #2a2a2a;
+    --input-text: #e0e0e0;
+    --input-border: #ffffff;
+    --button-hover: rgba(255, 255, 255, 0.15);
+    --scrollbar-thumb: #ffffffaf;
+    --scrollbar-track: #ffffff27;
+}
+
+/* 图标在深色模式下反转颜色 */
+html[data-theme="dark"] img:not([data-theme-invert="false"]) {
+    filter: invert(1);
+}
