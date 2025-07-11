@@ -48,7 +48,7 @@
             </div>
 
             <!-- 收起侧边栏 -->
-            <HoverBtn class="sidebar-fold" :src="unfoldIcon" title="展开" @click="foldSidebar" v-if="isFold" />
+            <img class="sidebar-fold" :src="unfoldIcon" @click="foldSidebar" v-if="isFold" />
 
         </div>
 
@@ -56,7 +56,7 @@
         <div class="main-content">
 
             <!-- 标题和功能 -->
-            <div class="setting">
+            <div class="setting" v-if="!otherUtil">
                 <div class="setting-title">
                     <div style="white-space: nowrap;font-size: 16px;">{{ getTitle() }}</div>
                     <div class="ai-alert">内容由 AI 生成</div>
@@ -67,30 +67,29 @@
                 </div>
             </div>
 
-            <!-- 聊天内容 -->
-            <BaseAIChat :streamMessage="streamMessage" :startOutPut="startOutPut" :id="curID"
-                @finishOutPut="finishOutPut" @clearStreamMessage="clearStreamMessage" @updateHistName="updateHistName"
-                @isNoChat="(val) => { noChat = val }">
-            </BaseAIChat>
+            <!-- 聊天内容及其他功能 -->
+            <router-view v-slot="{ Component }">
+                <component :is="Component" :streamMessage="streamMessage" :startOutPut="startOutPut" :id="curID"
+                    @finishOutPut="finishOutPut" @clearStreamMessage="clearStreamMessage"
+                    @updateHistName="updateHistName" @refreshCurId="refreshCurId"
+                    @isNoChat="(val: boolean) => { noChat = val }">
+                </component>
+            </router-view>
 
             <!-- 输入框 -->
-            <div class="input-area" v-if="noChat">
+            <div class="input-area" v-if="noChat && !otherUtil">
                 <div class="input-container">
                     <input type="text" placeholder="随便问" v-model="streamMessage" />
                     <div class="input-actions">
-                        <button class="action-btn"
-                            :style="{ backgroundColor: isOnline ? '#d4ffcaaf' : '#ffffff', color: isOnline ? '#1eba13' : 'rgb(202, 202, 202)', outline: isOnline ? '1px solid #1eba13' : '1px solid #dddddd' }"
-                            @click="changeOnline">
-                            <img :src='isOnline ? isOnlineIcon : onlineIcon' class="icon-attach" style="width: 19px;"
-                                :style="{ stroke: isOnline ? '#1eba13' : 'rgb(202, 202, 202)' }">联网搜索
-                        </button>
+                        <HoverBtn ref="onlineBtn" :class="{ 'action-btn': true, 'texiao-btn': !isOnline }"
+                            direction="0px" driectionY="-190%" :src="onlineIcon" :title="isOnline ? '联网搜索' : '已联网'"
+                            @click="changeOnline" width="25px" />
+                        <HoverBtn :class="{ 'action-btn': true, 'code-btn': isCodeMode }"
+                            :title="isCodeMode ? '已开启' : '编程助手'" :src="AICode" width="21px" direction="44px"
+                            @click="toggleCodeMode" />
                     </div>
-                    <button style="position: absolute;right:49px;border: none;" class="submit"
-                        @click="streamMessage = ''" v-if="streamMessage"><img :src="clearInput" class="clearInput">
-                    </button>
-                    <button style="position: absolute;right:6px;" class="submit" @click="startOutPut = true"><img
-                            :src="fasong" class="fasong">
-                    </button>
+                    <HoverBtn :src="clearInput" title="清空" @click="streamMessage = ''" v-if="streamMessage" />
+                    <HoverBtn :src="fasong" title="发送" @click="startOutPut = true" width="25px" />
                 </div>
             </div>
 
@@ -108,7 +107,6 @@ import information from '../../assets/img/聊天记录.svg'
 import deleteIcon from '../../assets/img/删除.svg'
 import fasong from '../../assets/img/fasong1.svg'
 import onlineIcon from '../../assets/img/online.svg'
-import isOnlineIcon from '../../assets/img/isOnline.svg'
 import foldIcon from '../../assets/img/收起.svg'
 import unfoldIcon from '../../assets/img/unFold.svg'
 import sousuo from '../../assets/img/搜索-copy.svg'
@@ -116,11 +114,14 @@ import liaotianjilu from '../../assets/img/聊天记录.svg'
 import clearInput from '../../assets/img/clearInput.svg'
 import user from '../../assets/img/user.svg'
 import share from '../../assets/img/share.svg'
-import { ref, onMounted } from 'vue'
-import BaseAIChat from './content.vue'
+import AICode from '../../assets/img/AICode.svg'
+import { ref, onMounted, watchEffect } from 'vue'
 import { getAllContent, addToAllContent, onlineSearch, deleteContent } from '../../apis/api/chat'
 import BaseSetting from '../user/baseSetting.vue'
 import HoverBtn from '../../components/hoverBtn.vue'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
 
 let startOutPut = ref(false)  //传递一次输入内容
 const isShowMenu = ref(false)  // 是否显示菜单
@@ -131,11 +132,23 @@ let isFold = ref(false)
 const isShowSetting = ref(false)
 const sidebarRef = ref<HTMLElement | null>(null)
 
-// 联网（默认不选）
-let isOnline = ref(false)
+let isOnline = ref(false)  // 联网（默认不选）
+const isCodeMode = ref(false) // 编程助手模式（默认不选）
+const otherUtil = ref(false)
+
+watchEffect(() => {
+    if (router.currentRoute.value.path !== '/') otherUtil.value = true
+    else otherUtil.value = false
+})
+
 const changeOnline = () => {
     isOnline.value = !isOnline.value
     onlineSearch(isOnline.value)
+}
+
+// 切换编程助手模式
+const toggleCodeMode = () => {
+    isCodeMode.value = !isCodeMode.value
 }
 
 // 收起侧边栏
@@ -194,6 +207,9 @@ const clearStreamMessage = () => streamMessage.value = ''
 
 // 更新对话名称
 const updateHistName = () => getAllContent().then((res: any) => history.value = res)
+
+// 刷新当前对话Id
+const refreshCurId = () => getAllContent().then((res: any) => curID.value = res[0].id)
 
 onMounted(() => {
     onlineSearch(isOnline.value)
@@ -398,7 +414,18 @@ onMounted(() => {
         }
 
         .sidebar-fold {
+            width: 18px;
             margin: auto 0;
+            transform: translateX(-50%);
+            transition: all 0.3s ease;
+            padding: 5px;
+
+            &:hover {
+                cursor: pointer;
+                border-radius: 40%;
+                background-color: rgba(128, 128, 128, 0.462);
+                transition: all 0.3s ease;
+            }
         }
     }
 
@@ -473,7 +500,6 @@ onMounted(() => {
                 .input-actions {
                     display: flex;
                     align-items: center;
-                    gap: 8px;
                     position: absolute;
                     left: 10px;
                     width: fit-content;
@@ -485,19 +511,127 @@ onMounted(() => {
                         padding: 6px;
                         border: none;
                         background: none;
-                        color: var(--text-secondary);
-                        background-color: var(--bg-color);
-                        outline: 1px solid var(--border-color);
                         border-radius: 12px;
                         cursor: pointer;
                         transition: all 0.3s ease;
 
-                        &:hover {
-                            background-color: @hover-bg;
-                        }
-
                         .icon-attach {
                             width: 19px;
+                        }
+
+                        &.texiao-btn {
+                            position: relative;
+                            z-index: 1;
+
+                            &:before {
+                                content: '';
+                                position: absolute;
+                                border-radius: 12px;
+                                top: 10%;
+                                left: 10%;
+                                width: 80%;
+                                height: 80%;
+                                background: linear-gradient(to bottom, #f49dc0af, #f85ea590, #ffaa009d);
+                                z-index: -1;
+                                animation: TeXiaoRotate 1.5s linear infinite;
+                            }
+
+                            &::after {
+                                content: '';
+                                background: linear-gradient(to bottom, #f49dc0af, #f7369090, #dff7549d);
+                                position: absolute;
+                                top: 50%;
+                                left: 50%;
+                                transform: translate(-50%, -50%);
+                                width: 80%;
+                                height: 80%;
+                                border-radius: 12px;
+                                animation: TeXiaoScale 1.5s ease-in-out infinite;
+                                z-index: -1;
+                            }
+
+                            @keyframes TeXiaoRotate {
+                                0% {
+                                    transform: rotate(0deg);
+                                }
+
+                                100% {
+                                    transform: rotate(360deg);
+                                }
+                            }
+
+                            @keyframes TeXiaoScale {
+                                0% {
+                                    transform: translate(-50%, -50%) scale(0.9);
+                                }
+
+                                50% {
+                                    transform: translate(-50%, -50%) scale(1);
+                                }
+
+                                100% {
+                                    transform: translate(-50%, -50%) scale(0.9);
+                                }
+                            }
+                        }
+
+                        &.code-btn {
+                            position: relative;
+                            z-index: 1;
+
+                            &:before {
+                                content: '';
+                                position: absolute;
+                                border-radius: 12px;
+                                top: 10%;
+                                left: 10%;
+                                width: 80%;
+                                height: 80%;
+                                background: linear-gradient(to right, #4facfecc, #00f2fecc);
+                                z-index: -1;
+                                animation: CodePulse 1.5s ease-in-out infinite;
+                            }
+
+                            &::after {
+                                content: '';
+                                background: linear-gradient(135deg, #4facfeaa, #00f2feaa);
+                                position: absolute;
+                                top: 50%;
+                                left: 50%;
+                                transform: translate(-50%, -50%);
+                                width: 80%;
+                                height: 80%;
+                                border-radius: 12px;
+                                animation: CodeGlow 2s ease-in-out infinite alternate;
+                                z-index: -1;
+                            }
+
+                            @keyframes CodePulse {
+                                0% {
+                                    opacity: 0.7;
+                                    transform: scale(0.95);
+                                }
+
+                                50% {
+                                    opacity: 1;
+                                    transform: scale(1.08);
+                                }
+
+                                100% {
+                                    opacity: 0.7;
+                                    transform: scale(0.95);
+                                }
+                            }
+
+                            @keyframes CodeGlow {
+                                0% {
+                                    box-shadow: 0 0 5px #4facfe77, 0 0 10px #00f2fe77;
+                                }
+
+                                100% {
+                                    box-shadow: 0 0 10px #4facfeaa, 0 0 20px #00f2feaa;
+                                }
+                            }
                         }
                     }
                 }

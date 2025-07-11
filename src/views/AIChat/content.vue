@@ -5,8 +5,8 @@
         <div v-for="item in messageList" :key="item.id" :class="item.role === 'user' ? 'user-zone' : 'ai-zone'">
             <div v-if="item.role === 'user'" style="position: relative;">
                 {{ item.content }}
-                <img :src="copy" alt="复制" class="copy-btn" @click="copyContent(item.content)">
-                <img :src="retry" alt="重试" class="retry-btn" @click="retryContent(item.content)">
+                <HoverBtn class="copy-btn" :src="copy" title="复制" width="15px" @click="copyContent(item.content)" />
+                <HoverBtn class="retry-btn" :src="retry" title="重试" width="15px" @click="retryContent(item.content)" />
             </div>
             <div v-else-if="item.role === 'online'" class="online-detail">
                 <div class="online-alert">参考资料</div>
@@ -18,7 +18,7 @@
                 <highlightjs v-if="isCodeBlock(item.content)" :code="extractCode(item.content)"
                     :language="detectLanguage(item.content)" class="code-block" />
                 <pre v-else v-html="formatAIResponse(item.content)"></pre>
-                <img :src="copy" alt="复制" class="copy-btn" @click="copyContent(item.content)">
+                <HoverBtn class="copy-btn" :src="copy" title="复制" width="15px" @click="copyContent(item.content)" />
             </div>
         </div>
 
@@ -33,20 +33,19 @@
             <div class="initial-shuru">
                 <textarea placeholder="问点什么吧 . . ." v-model="curInput"></textarea>
                 <div class="input-actions">
-                    <div class="texiao-btn" style="padding: 2px 3px;" ref="onlineBtn" @click="changeOnline">
-                        <button class="action-btn">
-                            <img :src="onlineIcon" class="isOnlineIcon">{{ isOnline ? '联网搜索' : '已联网' }}
-                        </button>
-                    </div>
                     <div class="input-actions-btn">
-                        <button class="action-btn" style="position: absolute;right:49px;border: none;" v-if="curInput"
-                            @click="clearInputFunction">
-                            <img :src="clearInput" class="clearInput">
-                        </button>
-                        <button class="action-btn" style="position: absolute;right:6px;border: none;"
-                            @click="beginChat">
-                            <img :src="fasong" class="fasong">
-                        </button>
+                        <HoverBtn ref="onlineBtn" :class="{ 'action-btn': true, 'texiao-btn': !isOnline }"
+                            direction="42px" :src="onlineIcon" :title="isOnline ? '联网搜索' : '已联网'" @click="changeOnline"
+                            width="25px" />
+                        <HoverBtn :class="{ 'action-btn': true, 'code-btn': isCodeMode }"
+                            :title="isCodeMode ? '已开启' : '编程助手'" :src="AICode" width="21px" direction="44px"
+                            @click="toggleCodeMode" />
+                    </div>
+
+                    <div class="input-actions-btn">
+                        <HoverBtn class="clearInput" :src="clearInput" title="清空" @click="clearInputFunction"
+                            v-if="curInput" />
+                        <HoverBtn class="fasong" :src="fasong" title="发送" @click="beginChat" width="25px" />
                     </div>
                 </div>
             </div>
@@ -60,9 +59,13 @@ import retry from '../../assets/img/重试.svg'
 import clearInput from '../../assets/img/clearInput.svg'
 import fasong from '../../assets/img/fasong1.svg'
 import onlineIcon from '../../assets/img/online.svg'
+import AICode from '../../assets/img/AICode.svg'
 import { ref, watch, onMounted, nextTick } from 'vue'
 import { createStreamConnection, updateContent, getContent, getAllContent } from '../../apis/api/chat'
 import 'highlight.js/styles/vs2015.css'
+import HoverBtn from '../../components/hoverBtn.vue'
+
+const isCodeMode = ref(false)
 
 // 流式聊天
 let retryCon = ref('')
@@ -73,8 +76,6 @@ let eventSource: any = null
 let messageList = ref<any>([])
 const chatContainer = ref<HTMLDivElement | null>(null)
 
-const onlineBtn = ref<HTMLButtonElement | null>(null)
-
 // 打字机
 const currentResponse = ref('')
 const typeIndex = ref(0)
@@ -82,6 +83,15 @@ let typingInterval: any = null
 const isDone = ref(false)
 
 const curInput = ref<string>('')
+
+// 联网搜索
+const isOnline = ref<boolean>(false)
+const changeOnline = () => {
+    isOnline.value = !isOnline.value
+}
+
+// 编程助手
+const toggleCodeMode = () => isCodeMode.value = !isCodeMode.value
 
 // props
 const props = defineProps({
@@ -91,10 +101,11 @@ const props = defineProps({
 })
 
 // emit
-const emit = defineEmits(['retryContent', 'finishOutPut', 'clearStreamMessage', 'clearCon', 'updateHistName', 'isNoChat'])
+const emit = defineEmits(['retryContent', 'finishOutPut', 'clearStreamMessage', 'clearCon', 'updateHistName', 'isNoChat', 'refreshCurId'])
 const finishOutPut = () => emit('finishOutPut')
 const clearStreamMessage = () => emit('clearStreamMessage')
 const updateHistName = () => emit('updateHistName')
+const refreshCurId = () => emit('refreshCurId')
 
 // watch
 watch([streamResponse, messageList], (newVal) => {
@@ -130,18 +141,9 @@ const formatAIResponse = (text: string) => {
     })
 }
 
-// 联网搜索
-const isOnline = ref<boolean>(false)
-const changeOnline = () => {
-    if (onlineBtn.value) {
-        onlineBtn.value.classList.toggle('texiao-btn')
-        isOnline.value = !isOnline.value
-    }
-}
-
 //流式聊天
 const beginChat = () => {
-    if (curInput.value === '') return
+    if (curInput.value === '' && props.streamMessage === '') return
     finishOutPut()
     showStream.value = true
     streamResponse.value = ''
@@ -244,6 +246,7 @@ const extractCode = (content: string): string => {
 
 onMounted(() => {
     getAllContent().then((res: any) => getContent(res[0].id).then((res: any) => messageList.value = res.content))
+    refreshCurId()
     // 初始加载时滚动到底部
     scrollToBottom()
 })
@@ -294,7 +297,7 @@ onMounted(() => {
             position: absolute;
             left: -18px;
             bottom: 0;
-            transform: translateY(160%);
+            transform: translateY(120%);
             color: var(--text-color);
             padding: 5px 7px;
             margin: 5px 15px 5px 5px;
@@ -302,18 +305,13 @@ onMounted(() => {
             cursor: pointer;
             white-space: nowrap;
             transition: all 0.3s ease;
-
-            &:hover {
-                border-radius: 10px;
-                background-color: rgba(128, 128, 128, 0.418);
-            }
         }
 
         .retry-btn {
             position: absolute;
             left: 7px;
             bottom: 0;
-            transform: translateY(160%);
+            transform: translateY(120%);
             color: var(--text-color);
             padding: 5px 7px;
             margin: 5px 15px 5px 5px;
@@ -321,11 +319,6 @@ onMounted(() => {
             cursor: pointer;
             white-space: nowrap;
             transition: all 0.3s ease;
-
-            &:hover {
-                border-radius: 10px;
-                background-color: rgba(128, 128, 128, 0.423);
-            }
         }
     }
 
@@ -389,9 +382,9 @@ onMounted(() => {
 
         .copy-btn {
             position: absolute;
-            right: -30px;
+            left: -10px;
             bottom: 0;
-            transform: translateY(160%);
+            transform: translateY(130%);
             color: var(--text-color);
             padding: 5px 7px;
             margin: 5px 15px 5px 5px;
@@ -399,11 +392,6 @@ onMounted(() => {
             cursor: pointer;
             white-space: nowrap;
             transition: all 0.3s ease;
-
-            &:hover {
-                border-radius: 10px;
-                background-color: rgba(128, 128, 128, 0.423);
-            }
         }
 
         .online-alert {
@@ -484,34 +472,63 @@ onMounted(() => {
             .input-actions {
                 display: flex;
                 gap: 10px;
+                justify-content: space-between;
+
+                .action-btn {
+                    border: none;
+                    background-color: transparent;
+                    border-radius: 12px;
+                    outline: none;
+                    padding: px;
+                    color: var(--text-color);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 4px;
+                    transition: all 0.3s ease;
+                    cursor: pointer;
+                    position: relative;
+                    z-index: 10;
+
+                    .isOnlineIcon {
+                        width: 20px;
+                    }
+                }
 
                 .texiao-btn {
                     position: relative;
-                    overflow: hidden;
-                    border-radius: 12px;
-                    padding: 2px 3px;
+                    z-index: 1;
 
-                    &::after {
+                    &:before {
                         content: '';
                         position: absolute;
+                        border-radius: 12px;
                         top: 0;
                         left: 0;
                         width: 100%;
                         height: 100%;
-                        transform: rotate(0deg);
                         background: linear-gradient(to bottom, #f49dc0af, #f85ea590, #ffaa009d);
-                        border-radius: 12px;
-                        z-index: 1;
-                        animation: TeXiao 3.2s linear infinite;
+                        z-index: -1;
+                        animation: TeXiaoRotate 1.5s linear infinite;
                     }
 
-                    @keyframes TeXiao {
+                    &::after {
+                        content: '';
+                        background: linear-gradient(to bottom, #f49dc0af, #f7369090, #dff7549d);
+                        position: absolute;
+                        top: 50%;
+                        left: 50%;
+                        transform: translate(-50%, -50%);
+                        width: 90%;
+                        height: 90%;
+                        border-radius: 12px;
+                        animation: TeXiaoScale 1.5s ease-in-out infinite;
+                        z-index: -1;
+                    }
+
+                    @keyframes TeXiaoRotate {
                         0% {
                             transform: rotate(0deg);
-                        }
-
-                        50% {
-                            transform: rotate(180deg);
                         }
 
                         100% {
@@ -519,25 +536,80 @@ onMounted(() => {
                         }
                     }
 
-                    .action-btn {
-                        border: none;
-                        background-color: var(--input-bg);
-                        border-radius: 12px;
-                        border: 2px solid rgba(128, 128, 128, 0.421);
-                        outline: none;
-                        padding: 6px;
-                        color: var(--text-color);
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        gap: 4px;
-                        transition: all 0.3s ease;
-                        cursor: pointer;
-                        position: relative;
-                        z-index: 10;
+                    @keyframes TeXiaoScale {
+                        0% {
+                            transform: translate(-50%, -50%) scale(0.9);
+                        }
 
-                        .isOnlineIcon {
-                            width: 20px;
+                        50% {
+                            transform: translate(-50%, -50%) scale(1.1);
+                        }
+
+                        100% {
+                            transform: translate(-50%, -50%) scale(0.9);
+                        }
+                    }
+                }
+
+                .code-btn {
+                    position: relative;
+                    z-index: 1;
+
+                    &:before {
+                        content: '';
+                        position: absolute;
+                        border-radius: 12px;
+                        top: 5%;
+                        left: 0%;
+                        width: 103%;
+                        height: 93%;
+                        background: linear-gradient(to right, #4facfecc, #00f2fecc);
+                        z-index: -1;
+                        animation: CodePulse 1.5s ease-in-out infinite;
+                    }
+
+                    &::after {
+                        content: '';
+                        background: linear-gradient(135deg, #4facfeaa, #00f2feaa);
+                        position: absolute;
+                        top: 50%;
+                        left: 50%;
+                        transform: translate(-50%, -50%);
+                        width: 100%;
+                        height: 90%;
+                        border-radius: 12px;
+                        animation: CodeGlow 1.5s ease-in-out infinite alternate;
+                        z-index: -1;
+                    }
+
+                    @keyframes CodePulse {
+                        0% {
+                            opacity: 0.7;
+                            transform: scale(0.95);
+                        }
+
+                        50% {
+                            opacity: 1;
+                            transform: scale(1.08);
+                        }
+
+                        100% {
+                            opacity: 0.7;
+                            transform: scale(0.95);
+                        }
+                    }
+
+                    @keyframes CodeGlow {
+                        0% {
+                            box-shadow: 0 0 10px #4facfe77, 0 0 10px #00f2fe77;
+                        }
+
+                        50% {
+                            box-shadow: 0 0 15px #0088ffaa, 0 0 20px #55f7ff7a;
+                        }
+
+                        100% {
+                            box-shadow: 0 0 10px #4facfe77, 0 0 10px #00f2fe77;
                         }
                     }
                 }

@@ -35,6 +35,9 @@ import helpIcon from '../../assets/img/help.svg'
 import share1Icon from '../../assets/img/share1.svg'
 import aboutUsIcon from '../../assets/img/aboutUs.svg'
 import { ref, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
 
 const emit = defineEmits(['closeSetting'])
 
@@ -48,12 +51,13 @@ const toggleTheme = () => {
 }
 
 const settingsList = computed(() => [
-    { icon: editIcon, title: '编辑个人资料', type: 'action', action: () => { } },
     { icon: languageIcon, title: '语言设置', type: 'select', value: '中文（简体）', action: () => { } },
     { icon: themeIcon, title: '主题切换', type: 'select', value: currentTheme.value === 'light' ? '浅色' : '深色', action: toggleTheme },
-    { icon: helpIcon, title: '帮助与反馈', type: 'action', action: () => { } },
-    { icon: share1Icon, title: '分享豆包给好友', type: 'action', action: () => { } },
-    { icon: aboutUsIcon, title: '关于豆包大模型', type: 'action', action: () => { } }
+    { icon: helpIcon, title: '帮助与反馈', type: 'action', action: () => { router.push('/help') } },
+    { icon: share1Icon, title: '分享豆包给好友', type: 'action', action: () => { router.push('/share') } },
+    { icon: aboutUsIcon, title: '关于豆包大模型', type: 'action', action: () => { router.push('/about') } },
+    { icon: editIcon, title: '登录', type: 'action', action: () => { router.push('/login') } },
+    { icon: editIcon, title: '退出', type: 'action', action: () => { router.push('/register') } }
 ])
 
 onMounted(() => {
