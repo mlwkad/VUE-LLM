@@ -27,6 +27,7 @@ request.interceptors.request.use(
             if (etag) config.headers['If-None-Match'] = etag
             if (lastModified) config.headers['If-Modified-Since'] = lastModified
         }
+        config.headers['Content-Type'] = 'application/json'
 
         return config
     },
@@ -45,9 +46,9 @@ request.interceptors.response.use(
         if (url && headers.etag) cacheManager.setETag(url, headers.etag)
         if (url && headers['last-modified']) cacheManager.setLastModified(url, headers['last-modified'])
 
-        const { code, message, data } = response.data
-        if (code === 200) return data
-        else return Promise.reject(new Error(message || '操作失败'))
+        // if (response.status === 200) return response.data
+        // else return Promise.reject(new Error(response.data.message || '操作失败'))
+        return response.data
     },
     (error) => {
         // 处理 HTTP 状态码

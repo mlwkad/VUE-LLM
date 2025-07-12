@@ -12,22 +12,25 @@
             </div>
 
             <!-- 新对话 -->
-            <button class="new-chat-btn" v-if="!isFold" @mouseenter="isShowMenu = true"
-                @mouseleave="isShowMenu = false;">
+            <button class="new-chat-btn" v-if="!isFold" @click="addContent">
                 <span class="plus-icon">+</span>新对话
-                <div class="menu-items" v-if="isShowMenu">
-                    <div class="menu-item" @click="addContent">
-                        <img :src="sousuo" alt="搜索" class="icon-search">搜索
-                    </div>
-                    <div class="menu-item" @click="addContent">
-                        <img :src="liaotianjilu" alt="聊天记录" class="icon-liaotianjilu">聊天记录
-                    </div>
-                </div>
             </button>
+
+            <!-- 功能展示 -->
+            <div class="function-show" v-if="!isFold">
+                <span class="function-show-title">现有功能</span>
+                <div class="function-show-item" v-for="item in curUtils" :key="item.name">
+                    <div class="function-show-item-content">
+                        <img :src="item.icon">
+                        <div class="function-show-item-name">{{ item.name }}</div>
+                    </div>
+                    <div>{{ item.description }}</div>
+                </div>
+            </div>
 
             <!-- 历史对话 -->
             <div class="history-section" v-if="!isFold">
-                <h3>历史对话</h3>
+                <h4>历史对话</h4>
                 <div class="history-items">
                     <div class="history-item" v-for="item in history" :key="item.id">
                         <div class="history-item-content">
@@ -37,8 +40,9 @@
                             }">
                                 <img :src="information" alt="User Avatar" class="avatar"
                                     style="width: 14px;transform: translateY(1px);margin-right: 2px;">
-                                {{ item.content && item.content.length > 0 ? item.content[0].content :
-                                    '新对话' }}
+                                <div style="width: 78%;overflow: hidden;text-overflow: ellipsis;white-space: nowrap;">
+                                    {{ item.content && item.content.length > 0 ? item.content[0].content : '新对话' }}
+                                </div>
                                 <HoverBtn class="delete-icon" :src="deleteIcon" title="删除"
                                     @click.stop="deleteHist(item.id)" />
                             </span>
@@ -69,10 +73,10 @@
 
             <!-- 聊天内容及其他功能 -->
             <router-view v-slot="{ Component }">
-                <component :is="Component" :streamMessage="streamMessage" :startOutPut="startOutPut" :id="curID"
-                    @finishOutPut="finishOutPut" @clearStreamMessage="clearStreamMessage"
-                    @updateHistName="updateHistName" @refreshCurId="refreshCurId"
-                    @isNoChat="(val: boolean) => { noChat = val }">
+                <component :is="Component" :streamMessage="isCodeMode ? chatStore.result : streamMessage"
+                    :startOutPut="startOutPut" :id="curID" @finishOutPut="finishOutPut"
+                    @clearStreamMessage="clearStreamMessage" @updateHistName="updateHistName"
+                    @refreshCurId="refreshCurId" @isNoChat="(val: boolean) => { noChat = val }">
                 </component>
             </router-view>
 
@@ -81,15 +85,22 @@
                 <div class="input-container">
                     <input type="text" placeholder="随便问" v-model="streamMessage" />
                     <div class="input-actions">
-                        <HoverBtn ref="onlineBtn" :class="{ 'action-btn': true, 'texiao-btn': !isOnline }"
-                            direction="0px" driectionY="-190%" :src="onlineIcon" :title="isOnline ? '联网搜索' : '已联网'"
+                        <HoverBtn ref="onlineBtn" :class="{ 'action-btn': true, 'texiao-btn': isOnline }"
+                            direction="-8%" directionY="-190%" :src="onlineIcon" :title="isOnline ? '已联网' : '联网搜索'"
                             @click="changeOnline" width="25px" />
                         <HoverBtn :class="{ 'action-btn': true, 'code-btn': isCodeMode }"
                             :title="isCodeMode ? '已开启' : '编程助手'" :src="AICode" width="21px" direction="44px"
                             @click="toggleCodeMode" />
                     </div>
                     <HoverBtn :src="clearInput" title="清空" @click="streamMessage = ''" v-if="streamMessage" />
-                    <HoverBtn :src="fasong" title="发送" @click="startOutPut = true" width="25px" />
+                    <HoverBtn :src="fasong" title="发送" @click="startOutPut = true" width="25px" v-if="!isCodeMode" />
+                    <div class="code-btn-container" v-if="isCodeMode">
+                        <HoverBtn :src="pushCode" title="开始编程" @click="startOutPut = true" width="25px" />
+                        <select class="code-select" v-model="selectedLanguage" @change="changeLanguage">
+                            <option class="code-select-option" v-for="item in codeLanguage" :value="item" :id="item"
+                                :key="item">{{ item }}</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -109,17 +120,19 @@ import fasong from '../../assets/img/fasong1.svg'
 import onlineIcon from '../../assets/img/online.svg'
 import foldIcon from '../../assets/img/收起.svg'
 import unfoldIcon from '../../assets/img/unFold.svg'
-import sousuo from '../../assets/img/搜索-copy.svg'
-import liaotianjilu from '../../assets/img/聊天记录.svg'
+import code from '../../assets/img/AIcode.svg'
+import online from '../../assets/img/online.svg'
 import clearInput from '../../assets/img/clearInput.svg'
 import user from '../../assets/img/user.svg'
 import share from '../../assets/img/share.svg'
 import AICode from '../../assets/img/AICode.svg'
-import { ref, onMounted, watchEffect } from 'vue'
-import { getAllContent, addToAllContent, onlineSearch, deleteContent } from '../../apis/api/chat'
+import pushCode from '../../assets/img/pushCode.svg'
+import { ref, onMounted, watchEffect, watch } from 'vue'
+import { getAllContent, addToAllContent, onlineSearch, deleteContent } from '../../apiStandard/api/chat'
 import BaseSetting from '../user/baseSetting.vue'
 import HoverBtn from '../../components/hoverBtn.vue'
 import { useRouter } from 'vue-router'
+import { useChatStore } from '../../store/chat'
 
 const router = useRouter()
 
@@ -136,20 +149,44 @@ let isOnline = ref(false)  // 联网（默认不选）
 const isCodeMode = ref(false) // 编程助手模式（默认不选）
 const otherUtil = ref(false)
 
+const codeLanguage = ['javascript', 'typescript', 'python', 'java', 'csharp', 'cpp', 'sql']
+const selectedLanguage = ref('javascript')
+
+const chatStore = useChatStore()
+
+const curUtils = [
+    {
+        name: '编程助手',
+        description: '分析讲解代码，可使用多种编程语言',
+        icon: code
+    }, {
+        name: '联网搜索',
+        description: '全网搜集信息进行分析总结',
+        icon: online
+    }
+]
+
+// 历史对话
+let curID = ref(1)
+const history = ref<any>([])
+
 watchEffect(() => {
     if (router.currentRoute.value.path !== '/') otherUtil.value = true
     else otherUtil.value = false
 })
+watch(isOnline, (newVal) => { if (newVal) isCodeMode.value = false })
+watch(isCodeMode, (newVal) => { if (newVal) isOnline.value = false })
+watch(streamMessage, (newVal) => { chatStore.input = newVal })
 
 const changeOnline = () => {
     isOnline.value = !isOnline.value
     onlineSearch(isOnline.value)
 }
 
+const changeLanguage = () => chatStore.selectedLanguage = selectedLanguage.value
+
 // 切换编程助手模式
-const toggleCodeMode = () => {
-    isCodeMode.value = !isCodeMode.value
-}
+const toggleCodeMode = () => isCodeMode.value = !isCodeMode.value
 
 // 收起侧边栏
 const foldSidebar = () => {
@@ -157,10 +194,6 @@ const foldSidebar = () => {
     if (isFold.value) sidebarRef.value!.style.width = '0px'
     else sidebarRef.value!.style.width = '220px'
 }
-
-// 历史对话
-let curID = ref(1)
-const history = ref<any>([])
 
 // 获取题目
 const getTitle = () => {
@@ -196,7 +229,6 @@ const addContent = () => {
             curID.value = res[0].id
         })
     })
-
 }
 
 // 完成流式输出
@@ -223,9 +255,7 @@ onMounted(() => {
     if (window.innerWidth < 500) isFold.value = true
     // 获取主题
     const savedTheme = localStorage.getItem('theme')
-    if (savedTheme) {
-        document.documentElement.setAttribute('data-theme', savedTheme)
-    }
+    if (savedTheme) document.documentElement.setAttribute('data-theme', savedTheme)
 })
 </script>
 
@@ -304,41 +334,58 @@ onMounted(() => {
                 font-size: 18px;
             }
 
-            .menu-items {
-                position: absolute;
-                top: 37px;
-                left: 0;
-                display: flex;
-                flex-direction: column;
-                gap: 1px;
-                background-color: var(--bg-color);
-                border-radius: 8px;
-                padding: 8px 16px;
-                border: 1px solid @border-color;
-                z-index: 1000;
+        }
 
-                .menu-item {
+        .function-show {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+
+            .function-show-title {
+                font-size: 16px;
+                font-weight: 600;
+                color: var(--text-color);
+            }
+
+            .function-show-item {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                cursor: pointer;
+                background-color: @background-color;
+                border: 1px solid @border-color;
+                border-radius: 8px;
+                padding: 8px;
+                margin: 5px 0;
+                font-size: 14px;
+                color: var(--text-color);
+
+                .function-show-item-content {
                     display: flex;
                     align-items: center;
-                    gap: 8px;
-                    padding: 8px 20px;
-                    border-radius: 6px;
-                    color: var(--text-color);
-                    cursor: pointer;
-                    transition: all 0.3s ease;
+                    gap: 5px;
+                    flex-direction: column;
+                    width: 30%;
 
-                    &:hover {
-                        background-color: @hover-bg;
-                    }
-
-                    .icon-search {
+                    img {
                         width: 20px;
+                        height: 20px;
                     }
 
-                    .icon-liaotianjilu {
-                        width: 15px;
-                        margin-right: 4px;
+                    .function-show-item-name {
+                        white-space: nowrap;
+                        font-size: 12px;
+                        font-weight: 400;
+                        opacity: 0.7;
+                        color: var(--text-color);
                     }
+                }
+
+                .function-show-item-description {
+                    font-size: 12px;
+                    font-weight: 400;
+                    opacity: 0.8;
+                    color: var(--text-color);
                 }
             }
         }
@@ -362,7 +409,8 @@ onMounted(() => {
                     .history-item-content {
                         .history-item-content-text {
                             position: relative;
-                            display: inline-block;
+                            display: flex;
+                            gap: 5px;
                             overflow: hidden;
                             text-overflow: ellipsis;
                             white-space: nowrap;
@@ -468,12 +516,14 @@ onMounted(() => {
         }
 
         .input-area {
-            margin-top: auto;
+            width: 80%;
+            margin: 0 auto;
             padding: 16px 0px 8px;
 
             .input-container {
                 display: flex;
                 align-items: center;
+                justify-content: space-around;
                 gap: 8px;
                 border: 2px solid var(--input-border);
                 border-radius: 12px;
@@ -632,6 +682,32 @@ onMounted(() => {
                                     box-shadow: 0 0 10px #4facfeaa, 0 0 20px #00f2feaa;
                                 }
                             }
+                        }
+                    }
+                }
+
+                .code-btn-container {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+
+                    .code-select {
+                        color: var(--text-color);
+                        background-color: var(--input-bg);
+                        border-radius: 12px;
+                        padding: 6px;
+                        border: 2px solid var(--input-border);
+                        min-width: 100px;
+                        outline: none;
+                        cursor: pointer;
+                        font-size: 14px;
+
+                        .code-select-option {
+                            background-color: var(--input-bg);
+                            border: none;
+                            outline: none;
+                            padding: 4px;
+                            border-radius: 12px;
                         }
                     }
                 }

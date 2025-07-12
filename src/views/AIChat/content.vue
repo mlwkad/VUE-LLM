@@ -3,7 +3,7 @@
 
         <!-- 聊天内容 -->
         <div v-for="item in messageList" :key="item.id" :class="item.role === 'user' ? 'user-zone' : 'ai-zone'">
-            <div v-if="item.role === 'user'" style="position: relative;">
+            <div v-if="item.role === 'user'" style="position: relative">
                 {{ item.content }}
                 <HoverBtn class="copy-btn" :src="copy" title="复制" width="15px" @click="copyContent(item.content)" />
                 <HoverBtn class="retry-btn" :src="retry" title="重试" width="15px" @click="retryContent(item.content)" />
@@ -14,9 +14,8 @@
                     {{ index + 1 }} . <a :href="info.url" target="_blank">{{ info.title }}</a>
                 </div>
             </div>
-            <div v-else style="position: relative;">
-                <highlightjs v-if="isCodeBlock(item.content)" :code="extractCode(item.content)"
-                    :language="detectLanguage(item.content)" class="code-block" />
+            <div v-else style="position: relative;width: 100%;">
+                <CodeHighlight v-if="item.content.includes('```')" :content="item.content" />
                 <pre v-else v-html="formatAIResponse(item.content)"></pre>
                 <HoverBtn class="copy-btn" :src="copy" title="复制" width="15px" @click="copyContent(item.content)" />
             </div>
@@ -24,7 +23,8 @@
 
         <!-- 回复完成之前显示流式,流式回复完成之后隐藏,并将完整回复保存到 messageList,该回复又被显示 -->
         <div v-if="showStream" class="ai-zone">
-            <pre v-html="formatAIResponse(streamResponse)"></pre>
+            <CodeHighlight v-if="streamResponse.includes('```')" :content="streamResponse" />
+            <pre v-else v-html="formatAIResponse(streamResponse)"></pre>
         </div>
 
         <!-- 初始输入框 -->
@@ -33,10 +33,11 @@
             <div class="initial-shuru">
                 <textarea placeholder="问点什么吧 . . ." v-model="curInput"></textarea>
                 <div class="input-actions">
+
                     <div class="input-actions-btn">
-                        <HoverBtn ref="onlineBtn" :class="{ 'action-btn': true, 'texiao-btn': !isOnline }"
-                            direction="42px" :src="onlineIcon" :title="isOnline ? '联网搜索' : '已联网'" @click="changeOnline"
-                            width="25px" />
+                        <HoverBtn ref="onlineBtn" :class="{ 'action-btn': true, 'texiao-btn': isOnline }"
+                            direction="-15%" directionY="-47px" :src="onlineIcon" :title="isOnline ? '已联网 ' : '联网搜索'"
+                            @click="changeOnline" width="25px" />
                         <HoverBtn :class="{ 'action-btn': true, 'code-btn': isCodeMode }"
                             :title="isCodeMode ? '已开启' : '编程助手'" :src="AICode" width="21px" direction="44px"
                             @click="toggleCodeMode" />
@@ -45,8 +46,17 @@
                     <div class="input-actions-btn">
                         <HoverBtn class="clearInput" :src="clearInput" title="清空" @click="clearInputFunction"
                             v-if="curInput" />
-                        <HoverBtn class="fasong" :src="fasong" title="发送" @click="beginChat" width="25px" />
+                        <HoverBtn v-if="!isCodeMode" class="fasong" :src="fasong" title="发送" @click="beginChat"
+                            width="25px" />
+                        <div class="code-btn-container" v-if="isCodeMode">
+                            <HoverBtn :src="pushCode" title="开始编程" @click="beginChat" width="25px" />
+                            <select class="code-select" v-model="selectedLanguage">
+                                <option class="code-select-option" v-for="item in codeLanguage" :value="item" :id="item"
+                                    :key="item">{{ item }}</option>
+                            </select>
+                        </div>
                     </div>
+
                 </div>
             </div>
         </div>
@@ -60,11 +70,14 @@ import clearInput from '../../assets/img/clearInput.svg'
 import fasong from '../../assets/img/fasong1.svg'
 import onlineIcon from '../../assets/img/online.svg'
 import AICode from '../../assets/img/AICode.svg'
+import pushCode from '../../assets/img/pushCode.svg'
 import { ref, watch, onMounted, nextTick } from 'vue'
-import { createStreamConnection, updateContent, getContent, getAllContent } from '../../apis/api/chat'
-import 'highlight.js/styles/vs2015.css'
+import { createStreamConnection, updateContent, getContent, getAllContent, onlineSearch } from '../../apiStandard/api/chat'
 import HoverBtn from '../../components/hoverBtn.vue'
+import CodeHighlight from '../../components/codeHighlight.vue'
 
+const codeLanguage = ['javascript', 'typescript', 'python', 'java', 'csharp', 'cpp', 'sql']
+const selectedLanguage = ref('javascript')
 const isCodeMode = ref(false)
 
 // 流式聊天
@@ -88,26 +101,24 @@ const curInput = ref<string>('')
 const isOnline = ref<boolean>(false)
 const changeOnline = () => {
     isOnline.value = !isOnline.value
+    onlineSearch(isOnline.value)
 }
 
 // 编程助手
 const toggleCodeMode = () => isCodeMode.value = !isCodeMode.value
 
-// props
 const props = defineProps({
     streamMessage: { type: String, default: '' },
     startOutPut: { type: Boolean, default: false },
     id: { type: Number, default: 0 }, // 当前对话id
 })
 
-// emit
 const emit = defineEmits(['retryContent', 'finishOutPut', 'clearStreamMessage', 'clearCon', 'updateHistName', 'isNoChat', 'refreshCurId'])
 const finishOutPut = () => emit('finishOutPut')
 const clearStreamMessage = () => emit('clearStreamMessage')
 const updateHistName = () => emit('updateHistName')
 const refreshCurId = () => emit('refreshCurId')
 
-// watch
 watch([streamResponse, messageList], (newVal) => {
     scrollToBottom()
     const [, newMessageList] = newVal
@@ -116,6 +127,8 @@ watch([streamResponse, messageList], (newVal) => {
 })
 watch(() => props.id, (newVal) => { if (newVal) getContent(newVal).then((res: any) => messageList.value = res.content) })
 watch(() => props.startOutPut, (newVal) => { if (newVal && props.streamMessage) beginChat() })
+watch(isOnline, (newVal) => { if (newVal) isCodeMode.value = false })
+watch(isCodeMode, (newVal) => { if (newVal) isOnline.value = false })
 
 //scrollY 是一个全局属性，表示整个窗口在垂直方向上已滚动的距离, 只读
 //scrollTop 是某个元素在垂直方向上已滚动的距离，只读
@@ -143,16 +156,17 @@ const formatAIResponse = (text: string) => {
 
 //流式聊天
 const beginChat = () => {
-    if (curInput.value === '' && props.streamMessage === '') return
+    if (isCodeMode.value) curInput.value = `使用${selectedLanguage.value}语言帮我解决:${curInput.value}`
+    let selectInput = props.streamMessage || curInput.value || retryCon.value
+    if (selectInput === '') return
+
     finishOutPut()
     showStream.value = true
     streamResponse.value = ''
     streamRespOnline.value = []
-    saveMessage('user', props.streamMessage || retryCon.value || curInput.value)
+    saveMessage('user', selectInput)
     writeFontMachine()
-    if (props.streamMessage) eventSource = createStreamConnection(props.streamMessage)
-    else if (retryCon.value) eventSource = createStreamConnection(retryCon.value)
-    else if (curInput.value) eventSource = createStreamConnection(curInput.value)
+    eventSource = createStreamConnection(selectInput)
     eventSource.onmessage = (event: any) => {
         if (event.data === '[DONE]') {
             isDone.value = true
@@ -164,7 +178,7 @@ const beginChat = () => {
             streamRespOnline.value = data.onlineInfo
             saveMessage('online', data.onlineInfo)
         }
-        else { currentResponse.value += data.content }
+        else currentResponse.value += data.content
     }
     eventSource.onerror = () => eventSource.close()
     eventSource.onopen = () => []
@@ -172,7 +186,7 @@ const beginChat = () => {
     curInput.value = ''
 }
 
-// 打字机效果
+// 打字机
 const writeFontMachine = () => {
     isDone.value = false
     currentResponse.value = ''
@@ -189,7 +203,7 @@ const writeFontMachine = () => {
                 saveMessage('ai', currentResponse.value)
             }
         }
-    }, 33)
+    }, 5)
 }
 
 //保留用户/AI信息
@@ -210,38 +224,6 @@ const copyContent = (content: string) => navigator.clipboard.writeText(content)
 const retryContent = (content: string) => {
     retryCon.value = content
     beginChat()
-}
-
-// 检测是否是代码块
-const isCodeBlock = (content: string): boolean => {
-    // 检查是否包含代码块标记
-    if (content.includes('```')) {
-        // 提取代码块内容
-        const codeBlockMatch = content.match(/```(?:(\w+)\n)?([\s\S]*?)```/);
-        if (codeBlockMatch) {
-            return true;
-        }
-    }
-    return false;
-}
-
-// 检测代码语言并提取代码内容
-const detectLanguage = (content: string): string => {
-    const codeBlockMatch = content.match(/```(\w+)?\n([\s\S]*?)```/);
-    if (codeBlockMatch) {
-        // 如果指定了语言，使用指定的语言
-        return codeBlockMatch[1] || 'javascript';
-    }
-    return 'javascript';
-}
-
-// 提取代码内容
-const extractCode = (content: string): string => {
-    const codeBlockMatch = content.match(/```(?:\w+)?\n([\s\S]*?)```/);
-    if (codeBlockMatch) {
-        return codeBlockMatch[1].trim();
-    }
-    return content;
 }
 
 onMounted(() => {
@@ -289,7 +271,7 @@ onMounted(() => {
         border: none;
         outline: none;
         padding: 5px 10px;
-        margin: 5px 15px 5px 5px;
+        margin: 5px 30px 5px 5px;
         font-weight: 350;
         font-size: 16px;
 
@@ -329,7 +311,7 @@ onMounted(() => {
         background-color: var(--ai-msg-bg);
         color: var(--text-color);
         padding: 5px 10px;
-        margin: 5px 5px 5px 7px;
+        margin: 5px 5px 5px 30px;
         font-weight: 450;
         font-size: 16px;
         border-radius: 6px 12px 12px 6px;
@@ -647,6 +629,33 @@ onMounted(() => {
                             &:hover {
                                 background-color: rgba(128, 128, 128, 0.436);
                                 border-radius: 10px;
+                            }
+                        }
+                    }
+
+                    .code-btn-container {
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+
+                        .code-select {
+                            color: var(--text-color);
+                            background-color: var(--input-bg);
+                            border-radius: 12px;
+                            padding: 6px;
+                            border: 2px solid var(--input-border);
+                            min-width: 100px;
+                            outline: none;
+                            cursor: pointer;
+                            font-size: 14px;
+                            width: auto;
+
+                            .code-select-option {
+                                background-color: var(--input-bg);
+                                border: none;
+                                outline: none;
+                                padding: 4px;
+                                border-radius: 12px;
                             }
                         }
                     }

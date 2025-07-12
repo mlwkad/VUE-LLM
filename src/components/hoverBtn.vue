@@ -15,7 +15,7 @@ const props = defineProps({
     title: { type: String, required: true },
     width: { type: String, default: '20px' },
     direction: { type: String, default: '-110%' },
-    driectionY: { type: String, default: '-50%' }
+    directionY: { type: String, default: '-50%' }
 })
 </script>
 
@@ -46,7 +46,7 @@ const props = defineProps({
         position: absolute;
         top: 50%;
         left: 0;
-        transform: translate(v-bind(direction), v-bind(driectionY));
+        transform: translate(v-bind(direction), v-bind(directionY));
         background-color: #aeaeae5c;
         border-radius: 5px;
         padding: 4px;
