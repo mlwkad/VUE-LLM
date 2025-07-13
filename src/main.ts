@@ -10,7 +10,7 @@ app.use(pinia)
 app.use(router)
 app.mount('#app')
 
-// 简单虚拟列表指令
+// 虚拟列表(目前切换聊天时会出错)
 app.directive('virtual-scroll', {
     mounted(el: HTMLElement) {
         // 保存原始DOM和精确高度
