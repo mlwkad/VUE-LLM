@@ -12,14 +12,14 @@
             </div>
 
             <!-- 新对话 -->
-            <button class="new-chat-btn" v-if="!isFold" @click="addContent">
+            <button class="new-chat-btn" v-if="!isFold" @click="addContent" v-fade-in>
                 <span class="plus-icon">+</span>新对话
             </button>
 
             <!-- 功能展示 -->
             <div class="function-show" v-if="!isFold">
                 <span class="function-show-title">现有功能</span>
-                <div class="function-show-item" v-for="item in curUtils" :key="item.name">
+                <div class="function-show-item" v-for="item in curUtils" :key="item.name" v-fade-in>
                     <div class="function-show-item-content">
                         <img :src="item.icon">
                         <div class="function-show-item-name">{{ item.name }}</div>
@@ -29,7 +29,7 @@
             </div>
 
             <!-- 历史对话 -->
-            <div class="history-section" v-if="!isFold">
+            <div class="history-section" v-if="!isFold" v-fade-in>
                 <h4>历史对话</h4>
                 <div class="history-items">
                     <div class="history-item" v-for="item in history" :key="item.id">
@@ -81,7 +81,7 @@
             </router-view>
 
             <!-- 输入框 -->
-            <div class="input-area" v-if="noChat && !otherUtil">
+            <div class="input-area" v-if="noChat && !otherUtil" v-fade-in>
                 <div class="input-container">
                     <input type="text" placeholder="随便问" v-model="streamMessage" />
                     <div class="input-actions">
@@ -260,7 +260,8 @@ onMounted(() => {
 </script>
 
 <style scoped lang="less">
-// CSS 变量
+@import '../../assets/styles.less';
+@import '../../assets/property.less';
 @primary-color: #1a73e8;
 @background-color: var(--bg-color);
 @sidebar-bg: var(--hover-bg);

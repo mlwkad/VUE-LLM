@@ -2,7 +2,8 @@
     <div class="XF-chat" ref="chatContainer">
 
         <!-- 聊天内容 -->
-        <div v-for="item in messageList" :key="item.id" :class="item.role === 'user' ? 'user-zone' : 'ai-zone'">
+        <div v-for="item in messageList" :key="item.id" :class="item.role === 'user' ? 'user-zone' : 'ai-zone'"
+            v-virtual-scroll>
             <div v-if="item.role === 'user'" style="position: relative">
                 {{ item.content }}
                 <HoverBtn class="copy-btn" :src="copy" title="复制" width="15px" @click="copyContent(item.content)" />
@@ -28,7 +29,7 @@
         </div>
 
         <!-- 初始输入框 -->
-        <div v-if="messageList.length === 0" class="initial-input">
+        <div v-if="messageList.length === 0" class="initial-input" v-fade-in>
             <div class='initial-title'>你好啊,用户名</div>
             <div class="initial-shuru">
                 <textarea placeholder="问点什么吧 . . ." v-model="curInput"></textarea>
