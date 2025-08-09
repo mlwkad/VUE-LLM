@@ -2,30 +2,28 @@
     <div class="XF-chat" ref="chatContainer">
 
         <!-- 聊天内容 -->
-        <div v-for="item in messageList" :key="item.id" :class="item.role === 'user' ? 'user-zone' : 'ai-zone'"
-            v-virtual-scroll>
-            <div v-if="item.role === 'user'" style="position: relative">
-                {{ item.content }}
-                <HoverBtn class="copy-btn" :src="copy" title="复制" width="15px" @click="copyContent(item.content)" />
-                <HoverBtn class="retry-btn" :src="retry" title="重试" width="15px" @click="retryContent(item.content)" />
-            </div>
-            <div v-else-if="item.role === 'online'" class="online-detail">
-                <div class="online-alert">参考资料</div>
-                <div v-for="info, index in item.content" style="margin: 10px 0 2px;">
-                    {{ index + 1 }} . <a :href="info.url" target="_blank">{{ info.title }}</a>
+        <VirtualList ref="virtualListRef" :item-list="messageList" :visible-count="10">
+            <template #default="{ item }">
+                <div :key="item.id" :class="item.role === 'user' ? 'user-zone' : 'ai-zone'">
+                    <div v-if="item.role === 'user'" style="position: relative">
+                        {{ item.content }}
+                    </div>
+                    <div v-else-if="item.role === 'online'" class="online-detail">
+                        <div class="online-alert">参考资料</div>
+                        <div v-for="info, index in item.content" style="margin: 10px 0 2px;">
+                            {{ index + 1 }} . <a :href="info.url" target="_blank">{{ info.title }}</a>
+                        </div>
+                    </div>
+                    <div v-else style="position: relative;width: 100%;">
+                        <MarkDown :content="item.content"></MarkDown>
+                    </div>
                 </div>
-            </div>
-            <div v-else style="position: relative;width: 100%;">
-                <CodeHighlight v-if="item.content.includes('```')" :content="item.content" />
-                <pre v-else v-html="formatAIResponse(item.content)"></pre>
-                <HoverBtn class="copy-btn" :src="copy" title="复制" width="15px" @click="copyContent(item.content)" />
-            </div>
-        </div>
+            </template>
+        </VirtualList>
 
         <!-- 回复完成之前显示流式,流式回复完成之后隐藏,并将完整回复保存到 messageList,该回复又被显示 -->
         <div v-if="showStream" class="ai-zone">
-            <CodeHighlight v-if="streamResponse.includes('```')" :content="streamResponse" />
-            <pre v-else v-html="formatAIResponse(streamResponse)"></pre>
+            <MarkDown :content="streamResponse"></MarkDown>
         </div>
 
         <!-- 初始输入框 -->
@@ -57,7 +55,6 @@
                             </select>
                         </div>
                     </div>
-
                 </div>
             </div>
         </div>
@@ -65,8 +62,6 @@
 </template>
 
 <script setup lang="ts">
-import copy from '../../assets/img/复制.svg'
-import retry from '../../assets/img/重试.svg'
 import clearInput from '../../assets/img/clearInput.svg'
 import fasong from '../../assets/img/fasong1.svg'
 import onlineIcon from '../../assets/img/online.svg'
@@ -75,7 +70,8 @@ import pushCode from '../../assets/img/pushCode.svg'
 import { ref, watch, onMounted, nextTick } from 'vue'
 import { createStreamConnection, updateContent, getContent, getAllContent, onlineSearch } from '../../apiStandard/api/chat'
 import HoverBtn from '../../components/hoverBtn.vue'
-import CodeHighlight from '../../components/codeHighlight.vue'
+import MarkDown from '../../components/markDown.vue'
+import VirtualList from '../../components/VirtualList.vue'
 
 const codeLanguage = ['javascript', 'typescript', 'python', 'java', 'csharp', 'cpp', 'sql']
 const selectedLanguage = ref('javascript')
@@ -88,7 +84,7 @@ const streamRespOnline = ref<any>([])
 const showStream = ref(false)
 let eventSource: any = null
 let messageList = ref<any>([])
-const chatContainer = ref<HTMLDivElement | null>(null)
+const virtualListRef = ref<any>(null)
 
 // 打字机
 const currentResponse = ref('')
@@ -135,7 +131,9 @@ watch(isCodeMode, (newVal) => { if (newVal) isOnline.value = false })
 //scrollTop 是某个元素在垂直方向上已滚动的距离，只读
 //scrollHeight 是某个元素的实际高度，包括溢出的文本高度, 只读
 //滚动到底部的函数
-const scrollToBottom = () => nextTick(() => { if (chatContainer.value) chatContainer.value.scrollTop = chatContainer.value.scrollHeight })
+const scrollToBottom = () => {
+    nextTick(() => { if (virtualListRef.value) virtualListRef.value.scrollToBottom })
+}
 
 // 清空输入
 const clearInputFunction = () => curInput.value = ''
@@ -216,15 +214,6 @@ const saveMessage = async (role: string, content: string) => {
     updateContent({ id: props.id, content: messageList.value })
     updateHistName()
     scrollToBottom()
-}
-
-//复制内容
-const copyContent = (content: string) => navigator.clipboard.writeText(content)
-
-//重试内容
-const retryContent = (content: string) => {
-    retryCon.value = content
-    beginChat()
 }
 
 onMounted(() => {
