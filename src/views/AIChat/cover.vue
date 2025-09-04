@@ -114,19 +114,19 @@
 </template>
 
 <script setup lang="ts">
-import information from '../../assets/img/聊天记录.svg'
-import deleteIcon from '../../assets/img/删除.svg'
-import fasong from '../../assets/img/fasong1.svg'
-import onlineIcon from '../../assets/img/online.svg'
-import foldIcon from '../../assets/img/收起.svg'
-import unfoldIcon from '../../assets/img/unFold.svg'
-import code from '../../assets/img/AIcode.svg'
-import online from '../../assets/img/online.svg'
-import clearInput from '../../assets/img/clearInput.svg'
-import user from '../../assets/img/user.svg'
-import share from '../../assets/img/share.svg'
-import AICode from '../../assets/img/AICode.svg'
-import pushCode from '../../assets/img/pushCode.svg'
+import information from '@assets/img/聊天记录.svg'
+import deleteIcon from '@assets/img/删除.svg'
+import fasong from '@assets/img/fasong1.svg'
+import onlineIcon from '@assets/img/online.svg'
+import foldIcon from '@assets/img/收起.svg'
+import unfoldIcon from '@assets/img/unFold.svg'
+import code from '@assets/img/AIcode.svg'
+import online from '@assets/img/online.svg'
+import clearInput from '@assets/img/clearInput.svg'
+import user from '@assets/img/user.svg'
+import share from '@assets/img/share.svg'
+import AICode from '@assets/img/AICode.svg'
+import pushCode from '@assets/img/pushCode.svg'
 import { ref, onMounted, watchEffect, watch } from 'vue'
 import { getAllContent, addToAllContent, onlineSearch, deleteContent } from '../../apiStandard/api/chat'
 import BaseSetting from '../user/baseSetting.vue'
@@ -247,6 +247,7 @@ onMounted(() => {
     onlineSearch(isOnline.value)
     getAllContent().then((res: any) => {
         if (res.length > 0) {
+            console.log(res)
             history.value = res
             curID.value = res[0].id
         }

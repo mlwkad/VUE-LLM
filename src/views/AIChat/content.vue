@@ -15,7 +15,11 @@
                         </div>
                     </div>
                     <div v-else style="position: relative;width: 100%;">
-                        <MarkDown :content="item.content"></MarkDown>
+                        <!-- 给Markdown组件的样式要穿透一下 -->
+                        <MarkDown :content="item.content"
+                            :container-class="item.role === 'user' ? 'user-markdown' : 'ai-markdown'"
+                            :code-class="item.role === 'user' ? 'user-code' : 'ai-code'">
+                        </MarkDown>
                     </div>
                 </div>
             </template>
@@ -23,7 +27,8 @@
 
         <!-- 回复完成之前显示流式,流式回复完成之后隐藏,并将完整回复保存到 messageList,该回复又被显示 -->
         <div v-if="showStream" class="ai-zone">
-            <MarkDown :content="streamResponse"></MarkDown>
+            <MarkDown :content="streamResponse" container-class="ai-markdown" code-class="ai-code">
+            </MarkDown>
         </div>
 
         <!-- 初始输入框 -->
@@ -228,14 +233,41 @@ onMounted(() => {
 @import '../../assets/styles.less';
 @import '../../assets/property.less';
 
+/* 给Markdown的样式 */
+:deep(.user-markdown) {
+    background-color: black;
+}
+
+:deep(.ai-markdown) {
+    background-color: rgba(252, 252, 252, 0.718);
+}
+
+:deep(.user-code) {
+    background-color: #e9e9e9;
+    border-radius: 8px;
+    padding: 12px;
+    color: #333333;
+}
+
+:deep(.ai-code) {
+    background-color: #d7d7d755;
+    border-radius: 8px;
+    padding: 12px;
+    color: #000000;
+    width: fit-content;
+    max-width: 100%;
+    overflow-x: auto;
+}
+
 .XF-chat {
+    height: calc(100vh - 110px);
+    overflow: hidden;
+    position: relative;
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
     width: 100%;
-    height: 100%;
     gap: 35px;
-    overflow-y: auto;
     overflow-x: hidden;
     padding-bottom: 40px;
     background-color: var(--chat-bg);
