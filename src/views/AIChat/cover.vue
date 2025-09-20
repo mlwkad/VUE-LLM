@@ -8,7 +8,7 @@
                     <img src="../../assets/img/logo.svg" style="width: 25px">
                     <div class="logo">右转</div>
                 </div>
-                <HoverBtn :src="foldIcon" title="折叠" @click="foldSidebar" />
+                <HoverBtn :src="foldIcon" title="折叠" position="left" @click="foldSidebar" />
             </div>
 
             <!-- 新对话 -->
@@ -43,7 +43,7 @@
                                 <div style="width: 78%;overflow: hidden;text-overflow: ellipsis;white-space: nowrap;">
                                     {{ item.content && item.content.length > 0 ? item.content[0].content : '新对话' }}
                                 </div>
-                                <HoverBtn class="delete-icon" :src="deleteIcon" title="删除"
+                                <HoverBtn class="delete-icon" :src="deleteIcon" title="删除" position='left'
                                     @click.stop="deleteHist(item.id)" />
                             </span>
                         </div>
@@ -66,8 +66,8 @@
                     <div class="ai-alert">内容由 AI 生成</div>
                 </div>
                 <div class="setting-set">
-                    <HoverBtn :src="share" title="分享" />
-                    <HoverBtn :src="user" title="设置" @click="isShowSetting = !isShowSetting" />
+                    <HoverBtn :src="share" title="分享" position="left"/>
+                    <HoverBtn :src="user" title="设置" position="left" @click="isShowSetting = !isShowSetting" />
                 </div>
             </div>
 
@@ -247,7 +247,7 @@ onMounted(() => {
     onlineSearch(isOnline.value)
     getAllContent().then((res: any) => {
         if (res.length > 0) {
-            console.log(res)
+            // console.log(res)
             history.value = res
             curID.value = res[0].id
         }

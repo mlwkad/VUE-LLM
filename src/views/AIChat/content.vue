@@ -2,9 +2,10 @@
     <div class="XF-chat" ref="chatContainer">
 
         <!-- 聊天内容 -->
-        <VirtualList ref="virtualListRef" :item-list="messageList" :visible-count="10">
-            <template #default="{ item }">
-                <div :key="item.id" :class="item.role === 'user' ? 'user-zone' : 'ai-zone'">
+        <div class="chat-content-container" ref="chatContentContainerRef">
+            <div v-for="item in messageList" :key="item.id"
+                :style="{ alignSelf: item.role === 'user' ? 'flex-end' : 'flex-start' }">
+                <div :class="item.role === 'user' ? 'user-zone' : 'ai-zone'">
                     <div v-if="item.role === 'user'" style="position: relative">
                         {{ item.content }}
                     </div>
@@ -22,8 +23,8 @@
                         </MarkDown>
                     </div>
                 </div>
-            </template>
-        </VirtualList>
+            </div>
+        </div>
 
         <!-- 回复完成之前显示流式,流式回复完成之后隐藏,并将完整回复保存到 messageList,该回复又被显示 -->
         <div v-if="showStream" class="ai-zone">
@@ -73,10 +74,10 @@ import onlineIcon from '../../assets/img/online.svg'
 import AICode from '../../assets/img/AICode.svg'
 import pushCode from '../../assets/img/pushCode.svg'
 import { ref, watch, onMounted, nextTick } from 'vue'
-import { createStreamConnection, updateContent, getContent, getAllContent, onlineSearch } from '../../apiStandard/api/chat'
+import axios from 'axios'
+import { updateContent, getContent, getAllContent, onlineSearch } from '../../apiStandard/api/chat'
 import HoverBtn from '../../components/hoverBtn.vue'
 import MarkDown from '../../components/markDown.vue'
-import VirtualList from '../../components/VirtualList.vue'
 
 const codeLanguage = ['javascript', 'typescript', 'python', 'java', 'csharp', 'cpp', 'sql']
 const selectedLanguage = ref('javascript')
@@ -87,9 +88,9 @@ let retryCon = ref('')
 const streamResponse = ref('')
 const streamRespOnline = ref<any>([])
 const showStream = ref(false)
-let eventSource: any = null
 let messageList = ref<any>([])
-const virtualListRef = ref<any>(null)
+const chatContentContainerRef = ref<HTMLElement | null>(null)
+let controller: AbortController | null = null
 
 // 打字机
 const currentResponse = ref('')
@@ -137,7 +138,12 @@ watch(isCodeMode, (newVal) => { if (newVal) isOnline.value = false })
 //scrollHeight 是某个元素的实际高度，包括溢出的文本高度, 只读
 //滚动到底部的函数
 const scrollToBottom = () => {
-    nextTick(() => { if (virtualListRef.value) virtualListRef.value.scrollToBottom })
+    nextTick(() => {
+        const container = chatContentContainerRef.value
+        if (container) {
+            container.scrollTop = container.scrollHeight
+        }
+    })
 }
 
 // 清空输入
@@ -146,13 +152,12 @@ const clearInputFunction = () => curInput.value = ''
 // 格式化AI回复，将[^1^]等引用转换为可点击的链接
 const formatAIResponse = (text: string) => {
     if (!text) return text
-    // 先移除 * 和 # 符号
-    text = text.replace(/[*#《》]/g, '')
     // 替换引用标记为HTML链接
-    return text.replace(/\[\^(\d+)\^\]/g, (match, index) => {  // match:符合正则的完整字符串,eg：[^4^], (\d+)捕获内容, index:对应的内容,但是是字符串，eg："4"
+    return text.replace(/\[\^(\d+)\^\]/g, (match, index) => {  // 匹配[^ number ^]
         const infoIndex = parseInt(index) - 1
         if (streamRespOnline.value && infoIndex >= 0 && infoIndex < streamRespOnline.value.length) {
-            return `<a href="${streamRespOnline.value[infoIndex].url}" target="_blank" class="reference-link">${index}</a>`
+            // 返回 markdown 格式链接，title 可选
+            return `[${index}](${streamRespOnline.value[infoIndex].url} "参考${index}")`
         }
         return match
     })
@@ -164,29 +169,68 @@ const beginChat = () => {
     let selectInput = props.streamMessage || curInput.value || retryCon.value
     if (selectInput === '') return
 
+    // 如果存在之前的请求,取消它
+    if (controller) {
+        controller.abort()
+    }
+    controller = new AbortController()
+
     finishOutPut()
     showStream.value = true
     streamResponse.value = ''
     streamRespOnline.value = []
     saveMessage('user', selectInput)
     writeFontMachine()
-    eventSource = createStreamConnection(selectInput)
-    eventSource.onmessage = (event: any) => {
-        if (event.data === '[DONE]') {
-            isDone.value = true
-            eventSource.close()
-            return
+
+    // 使用 axios 发送流式请求
+    let lastProcessedLength = 0 // 保存上一次处理过的数据长度
+
+    axios.get(`/api/chat/stream?message=${encodeURIComponent(selectInput)}`, {
+        responseType: 'text',
+        signal: controller.signal,
+        onDownloadProgress: (progressEvent: any) => {  // 浏览器每接收一个数据块就会触发该事件
+            // 当有响应头 Transfer-Encoding: chunked(分块传输, 无法预知响应体大小/响应头太大自动开启, 也可手动开启)返回数据时
+            // 浏览器会持续接收数据块，并将这些块逐步合并到同一个响应对象中
+            // 所以说需要记录上次处理到的位置, 每次只处理新增的部分
+            const text = progressEvent.event.target.response
+            const matches = text.split('\n\n').slice(0, -1) // match=[data: {...}, data: {...}, ...]
+            if (!matches) return
+            // 只处理新的数据块
+            const newMatches = matches.slice(lastProcessedLength)
+            lastProcessedLength = matches.length
+            // 处理新的数据块
+            newMatches.forEach((dataBlock: any) => {
+                try {
+                    const jsonStr = dataBlock.substring(6) // 移除 'data: ' 前缀
+                    if (jsonStr.trim() === '[DONE]') {
+                        isDone.value = true
+                        return
+                    }
+                    const data = JSON.parse(jsonStr)
+                    if (data.onlineInfo) {
+                        streamRespOnline.value = data.onlineInfo
+                        saveMessage('online', data.onlineInfo)
+                    } else if (data.content) {
+                        currentResponse.value += data.content
+                    }
+                } catch (e) {
+                    console.log('解析失败:', dataBlock, e)
+                }
+            })
         }
-        const data = JSON.parse(event.data)
-        if (data.onlineInfo) {
-            streamRespOnline.value = data.onlineInfo
-            saveMessage('online', data.onlineInfo)
+    }).catch((error: any) => {
+        if (axios.isCancel(error)) {
+            // 请求被取消
+            console.log('请求被取消')
+        } else {
+            // 其他错误
+            console.error('请求出错:', error)
         }
-        else currentResponse.value += data.content
-    }
-    eventSource.onerror = () => eventSource.close()
-    eventSource.onopen = () => []
-    clearStreamMessage()
+    }).finally(() => {
+        controller = null
+        clearStreamMessage()
+    })
+
     curInput.value = ''
 }
 
@@ -272,152 +316,164 @@ onMounted(() => {
     padding-bottom: 40px;
     background-color: var(--chat-bg);
 
-    &::-webkit-scrollbar {
-        width: 7px;
-
-        &-thumb {
-            background-color: var(--scrollbar-thumb);
-            border-radius: 12px;
-            outline: 2px solid var(--scrollbar-track);
-        }
-    }
-
-    .user-zone {
-        width: fit-content;
-        max-width: 80%;
+    .chat-content-container {
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: auto;
+        padding: 0 10px;
         display: flex;
-        align-self: flex-end;
-        background-color: var(--user-msg-bg);
-        color: var(--text-color);
-        border-radius: 12px;
-        border: none;
-        outline: none;
-        padding: 5px 10px;
-        margin: 5px 30px 5px 5px;
-        font-weight: 350;
-        font-size: 16px;
+        flex-direction: column;
 
-        .copy-btn {
-            position: absolute;
-            left: -18px;
-            bottom: 0;
-            transform: translateY(120%);
-            color: var(--text-color);
-            padding: 5px 7px;
-            margin: 5px 15px 5px 5px;
-            width: 15px;
-            cursor: pointer;
-            white-space: nowrap;
-            transition: all 0.3s ease;
-        }
 
-        .retry-btn {
-            position: absolute;
-            left: 7px;
-            bottom: 0;
-            transform: translateY(120%);
-            color: var(--text-color);
-            padding: 5px 7px;
-            margin: 5px 15px 5px 5px;
-            width: 15px;
-            cursor: pointer;
-            white-space: nowrap;
-            transition: all 0.3s ease;
-        }
-    }
+        &::-webkit-scrollbar {
+            width: 7px;
+            height: 7px;
 
-    .ai-zone {
-        max-width: 80%;
-        display: flex;
-        align-self: flex-start;
-        background-color: var(--ai-msg-bg);
-        color: var(--text-color);
-        padding: 5px 10px;
-        margin: 5px 5px 5px 30px;
-        font-weight: 450;
-        font-size: 16px;
-        border-radius: 6px 12px 12px 6px;
-        position: relative;
-
-        &:after {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 50%;
-            transform: translateY(-50%);
-            height: 90%;
-            width: 2px;
-            background: linear-gradient(to bottom, var(--ai-msg-bg), var(--ai-msg-border), var(--ai-msg-bg));
-        }
-
-        pre {
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            margin: 0;
-            font-family: inherit;
-            font-size: inherit;
-            font-weight: inherit;
-            color: var(--text-color);
-        }
-
-        :deep(.reference-link) {
-            display: inline-block;
-            transform: translateY(1px);
-            font-size: 13px;
-            width: 13px;
-            height: 13px;
-            line-height: 13px;
-            text-align: center;
-            text-decoration: none;
-            color: var(--text-color);
-            font-weight: bold;
-            cursor: pointer;
-            background-color: var(--bg-color);
-            border-radius: 100%;
-            margin-left: 3px;
-            border: 1px solid var(--text-color);
-            transition: color 0.3s ease, background-color 0.3s ease;
-
-            &:hover {
-                background-color: var(--text-color);
-                color: var(--bg-color);
+            &-thumb {
+                background-color: var(--scrollbar-thumb);
+                border-radius: 12px;
+                outline: 2px solid var(--scrollbar-track);
             }
         }
 
-        .copy-btn {
-            position: absolute;
-            left: -10px;
-            bottom: 0;
-            transform: translateY(130%);
+        .user-zone {
+            width: fit-content;
+            max-width: 80%;
+            display: flex;
+            align-self: flex-end;
+            background-color: var(--user-msg-bg);
             color: var(--text-color);
-            padding: 5px 7px;
-            margin: 5px 15px 5px 5px;
-            width: 15px;
-            cursor: pointer;
-            white-space: nowrap;
-            transition: all 0.3s ease;
+            border-radius: 12px;
+            border: none;
+            outline: none;
+            padding: 5px 10px;
+            margin: 5px 30px 5px 5px;
+            font-weight: 350;
+            font-size: 16px;
+
+            .copy-btn {
+                position: absolute;
+                left: -18px;
+                bottom: 0;
+                transform: translateY(120%);
+                color: var(--text-color);
+                padding: 5px 7px;
+                margin: 5px 15px 5px 5px;
+                width: 15px;
+                cursor: pointer;
+                white-space: nowrap;
+                transition: all 0.3s ease;
+            }
+
+            .retry-btn {
+                position: absolute;
+                left: 7px;
+                bottom: 0;
+                transform: translateY(120%);
+                color: var(--text-color);
+                padding: 5px 7px;
+                margin: 5px 15px 5px 5px;
+                width: 15px;
+                cursor: pointer;
+                white-space: nowrap;
+                transition: all 0.3s ease;
+            }
         }
 
-        .online-alert {
-            font-size: 20px;
+        .ai-zone {
+            max-width: 80%;
+            display: flex;
+            align-self: flex-start;
+            background-color: var(--ai-msg-bg);
             color: var(--text-color);
-        }
-
-        .online-detail {
+            padding: 5px 10px;
+            margin: 5px 5px 5px 30px;
+            font-weight: 450;
+            font-size: 16px;
+            border-radius: 6px 12px 12px 6px;
             position: relative;
+            overflow-y: auto;
 
-            a {
+            &:after {
+                content: '';
+                position: absolute;
+                left: 0;
+                top: 50%;
+                transform: translateY(-50%);
+                height: 90%;
+                width: 2px;
+                background: linear-gradient(to bottom, var(--ai-msg-bg), var(--ai-msg-border), var(--ai-msg-bg));
+            }
+
+            pre {
+                white-space: pre-wrap;
+                word-wrap: break-word;
+                margin: 0;
+                font-family: inherit;
+                font-size: inherit;
+                font-weight: inherit;
+                color: var(--text-color);
+            }
+
+            :deep(.reference-link) {
+                display: inline-block;
+                transform: translateY(1px);
+                font-size: 13px;
+                width: 13px;
+                height: 13px;
+                line-height: 13px;
+                text-align: center;
                 text-decoration: none;
-                color: transparent;
-                background-color: var(--text-color);
-                background-clip: text;
-                width: fit-content;
-                border-bottom: 2px solid var(--hover-bg);
-                transition: all 0.3s ease-in-out;
+                color: var(--text-color);
+                font-weight: bold;
+                cursor: pointer;
+                background-color: var(--bg-color);
+                border-radius: 100%;
+                margin-left: 3px;
+                border: 1px solid var(--text-color);
+                transition: color 0.3s ease, background-color 0.3s ease;
 
                 &:hover {
-                    text-decoration: underline;
-                    border-bottom: 2px solid var(--text-color);
+                    background-color: var(--text-color);
+                    color: var(--bg-color);
+                }
+            }
+
+            .copy-btn {
+                position: absolute;
+                left: -10px;
+                bottom: 0;
+                transform: translateY(130%);
+                color: var(--text-color);
+                padding: 5px 7px;
+                margin: 5px 15px 5px 5px;
+                width: 15px;
+                cursor: pointer;
+                white-space: nowrap;
+                transition: all 0.3s ease;
+            }
+
+            .online-alert {
+                font-size: 20px;
+                color: var(--text-color);
+            }
+
+            .online-detail {
+                position: relative;
+
+                a {
+                    text-decoration: none;
+                    color: transparent;
+                    background-color: var(--text-color);
+                    background-clip: text;
+                    width: fit-content;
+                    border-bottom: 2px solid var(--hover-bg);
+                    transition: all 0.3s ease-in-out;
+
+                    &:hover {
+                        text-decoration: underline;
+                        border-bottom: 2px solid var(--text-color);
+                    }
                 }
             }
         }

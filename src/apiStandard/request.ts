@@ -6,18 +6,57 @@
 import axios from 'axios'
 import { cacheManager } from './cache.ts' // 缓存工具
 
+// 访问令牌存储在 localStorage，带过期时间（1天）
+const ACCESS_TOKEN_KEY = 'ACCESS_TOKEN'
+const TOKEN_EXPIRE_TIME = 24 * 60 * 60 * 1000 // 1天毫秒数
+
+export const getAccessToken = (): string | null => {
+    const tokenData = localStorage.getItem(ACCESS_TOKEN_KEY)
+    if (!tokenData) return null
+    try {
+        const { token, timestamp } = JSON.parse(tokenData)
+        const now = Date.now()
+        // 检查是否过期
+        if (now - timestamp > TOKEN_EXPIRE_TIME) {
+            clearAccessToken()
+            return null
+        }
+        return token
+    } catch {
+        clearAccessToken()
+        return null
+    }
+}
+
+export const setAccessToken = (token: string): void => {
+    if (token) {
+        const tokenData = {
+            token,
+            timestamp: Date.now()
+        }
+        localStorage.setItem(ACCESS_TOKEN_KEY, JSON.stringify(tokenData))
+    }
+}
+
+export const clearAccessToken = (): void => {
+    localStorage.removeItem(ACCESS_TOKEN_KEY)
+}
+
 // 创建 axios 实例
 const request = axios.create({
     baseURL: import.meta.env.VITE_API_BASE_URL, // 从环境变量获取 API 基础路径
     timeout: 10000, // 请求超时时间
-    withCredentials: true, // 跨域请求时发送 cookie
 })
 
 // 请求拦截器
 request.interceptors.request.use(
     (config) => {
         // 添加认证头
-        // token要搞一下
+        const token = getAccessToken()
+        if (token) {
+            config.headers = config.headers || {}
+            config.headers['Authorization'] = `Bearer ${token}`
+        }
 
         // 添加缓存请求头（协商缓存）
         const { url } = config
@@ -53,11 +92,12 @@ request.interceptors.response.use(
     (error) => {
         // 处理 HTTP 状态码
         const status = error.response?.status
+        if (status === 401) {
+            clearAccessToken()
+            console.log('身份验证失败，请重新登录')
+            window.location.href = '/login'
+        }
         switch (status) {
-            case 401:
-                console.log('身份验证失败，请重新登录')
-                window.location.href = '/login'
-                break
             case 403:
                 console.log('权限不足，无法访问')
                 break

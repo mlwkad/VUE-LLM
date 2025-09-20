@@ -55,7 +55,7 @@ const getTooltipStyle = computed(() => {
         case 'left':
             return {
                 right: '100%',
-                top: '50%',
+                top: '45%',
                 transform: `translateY(-50%) translateX(-${props.offset}px)`
             }
         case 'right':

@@ -42,7 +42,7 @@ export default defineConfig({
   resolve: {
     alias: {
       // 路径别名配置，方便导入模块
-      '@': path.resolve(__dirname, 'src'), 
+      '@': path.resolve(__dirname, 'src'),
       '@components': path.resolve(__dirname, 'src/components'),
       '@assets': path.resolve(__dirname, 'src/assets'),
       '@views': path.resolve(__dirname, 'src/views'),
@@ -87,7 +87,7 @@ export default defineConfig({
     minify: 'terser', // 使用 terser 进行压缩(Webpack 中：需安装 terser-webpack-plugin 并在 optimization.minimizer 中配置)
     terserOptions: {
       compress: {  // terser 压缩配置
-        drop_console: true, // 删除 console
+        // drop_console: true, // 删除 console
         drop_debugger: true, // 删除 debugger
       },
     },
@@ -99,7 +99,8 @@ export default defineConfig({
         assetFileNames: 'assets/[ext]/[name]-[hash:6].[ext]',  // 静态资源根据类型分包
         manualChunks: {  // 手动分包
           vue: ['vue', 'vue-router', 'pinia'],
-          vendor: ['axios', '@highlightjs/vue-plugin', 'markdown-it', 'markdown-it-br', 'markdown-it-highlightjs', 'markdown-it-katex', 'markdown-it-mathjax3'],
+          vendor: ['axios', '@highlightjs/vue-plugin'],
+          markDownNeed: ['markdown-it', 'markdown-it-br', 'markdown-it-highlightjs', 'markdown-it-katex', 'markdown-it-mathjax3']
         }
         //关于代码分割
         // rollupOptions.output配置: 公共/入口/静态资源分开打包, 手动给第三方依赖分包
@@ -110,7 +111,7 @@ export default defineConfig({
     },
   },
 
-  // 依赖预构建(将零散的依赖合并为一个ESM文件(使用import/export语法的文件), 减少请求)
+  // 依赖预构建(不单独请求模块的子模块, 将所有子模块合为一个模块, 直接请求整个模块, 减少网络请求)
   optimizeDeps: {
     include: ['vue', 'vue-router', 'pinia', 'axios'],  // eg: 只写vue就是只对vue里零散的模块合并为一个esmodule文件(响应式处理, 运行时...)
   },
